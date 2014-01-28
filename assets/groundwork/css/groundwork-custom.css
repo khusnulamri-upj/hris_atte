@@ -1,0 +1,20 @@
+.tablelike .row {
+    border-left:1px solid #ddd;
+    border-right:1px solid #ddd;
+}
+
+.tablelike .row:first-child {
+    border-top:1px solid #ddd;
+    background:lightgrey;
+    font-weight:700;
+    font-size:1em;
+    color:#5a5a5a;
+}
+
+.tablelike .row:last-child {
+    border-bottom:1px solid #ddd;
+}
+
+.tablelike .row:nth-child(2n+3) {
+    background:#f2f2f2;
+}
