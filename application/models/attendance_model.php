@@ -134,6 +134,7 @@ class Attendance_model extends CI_Model {
         $late_limit = $this->Parameter->get_value('JAM_MASUK');
         $early_limit = $this->Parameter->get_value('JAM_KELUAR');
         $time_divider = $this->Parameter->get_value('JAM_TENGAH');
+        $detik_pertimbangan = $this->Parameter->get_value('DETIK_PERTIMBANGAN');
         
         
         $this->load->database('default');
@@ -343,7 +344,7 @@ class Attendance_model extends CI_Model {
             LEFT OUTER JOIN opt_keterangan opt
             ON att2.opt_keterangan = opt.opt_keterangan_id";*/
         
-        $sql = "SELECT att3.*,
+        /*$sql = "SELECT att3.*,
           IF(att3.is_late*att3.late_is_counted IS NULL,0,att3.is_late*att3.late_is_counted) AS counter_late,
           IF(att3.detik_telat_masuk_actual*att3.late_is_counted IS NULL,0,att3.detik_telat_masuk_actual*att3.late_is_counted) AS detik_telat_masuk,
           TIME_FORMAT(SEC_TO_TIME(IF(att3.detik_telat_masuk_actual*att3.late_is_counted>0,att3.detik_telat_masuk_actual*att3.late_is_counted,NULL)),'$fmt_time') AS waktu_telat_masuk
@@ -452,6 +453,117 @@ class Attendance_model extends CI_Model {
             ON gen_lbr2.tanggal = att2.tanggal
             LEFT OUTER JOIN opt_keterangan opt
             ON att2.opt_keterangan = opt.opt_keterangan_id)
+            att3";*/
+        
+        $sql = "SELECT att3.*,
+          IF(att3.is_late*att3.late_is_counted IS NULL,0,att3.is_late*att3.late_is_counted) AS counter_late,
+          IF(att3.detik_telat_masuk_actual*att3.late_is_counted IS NULL,0,att3.detik_telat_masuk_actual*att3.late_is_counted) AS detik_telat_masuk,
+          TIME_FORMAT(SEC_TO_TIME(IF(att3.detik_telat_masuk_actual*att3.late_is_counted>0,att3.detik_telat_masuk_actual*att3.late_is_counted,NULL)),'$fmt_time') AS waktu_telat_masuk
+        FROM (  
+          SELECT gen_lbr2.tanggal,
+            gen_lbr2.hari,
+            att2.jam_masuk,
+            att2.jam_keluar,
+            att2.opt_keterangan,
+            opt.content AS keterangan,
+            gen_lbr2.is_holiday,
+            gen_lbr2.desc_holiday,
+            att2.is_same,
+            att2.is_late,
+            att2.is_early,
+            att2.detik_telat_masuk AS detik_telat_masuk_actual,
+            IF(gen_lbr2.is_holiday,0,IF(is_late IS NULL,1,0)) AS is_blank,
+            gen_lbr2.tgl,
+            IF(IF(att2.counter_hadir_opt IS NOT NULL, att2.counter_hadir_opt, IF(gen_lbr2.is_holiday,0,att2.counter_hadir_att)) IS NULL, 0, IF(att2.counter_hadir_opt IS NOT NULL, att2.counter_hadir_opt, IF(gen_lbr2.is_holiday,0,att2.counter_hadir_att))) AS counter_hadir,
+            IF(gen_lbr2.is_holiday,0,IF(att2.late_is_counted IS NULL,IF(gen_lbr2.is_holiday,0,IF(is_late IS NULL,0,1)),att2.late_is_counted)) AS late_is_counted
+            FROM (
+              SELECT gen_lbr.*
+              FROM (  
+                SELECT gen.*,
+                lbr.deskripsi AS desc_holiday,
+                IF(lbr.deskripsi IS NULL,0,1) AS is_holiday
+                FROM (  
+                    SELECT DATE_FORMAT(DATE_ADD(MAKEDATE(z.tahun, z.gen_date), INTERVAL (z.bulan-1) MONTH),'$fmt_date') AS tanggal,
+                    DATE_FORMAT(DATE_ADD(MAKEDATE(z.tahun, z.gen_date), INTERVAL (z.bulan-1) MONTH),'%a') AS hari,
+                    gen_date AS tgl
+                    FROM (
+                      SELECT gen_date,
+                      $tahun AS tahun,
+                      $bulan AS bulan
+                      FROM tabel_helper
+                    ) z
+                    GROUP BY z.gen_date
+                    ORDER BY z.gen_date
+                ) gen
+                LEFT OUTER JOIN (
+                  SELECT *
+                  FROM libur
+                  ORDER BY libur.tgl DESC
+                ) lbr
+                ON ((UPPER(gen.hari) = UPPER(lbr.hari)) AND (lbr.tgl IS NULL) AND lbr.expired_time IS NULL)
+                OR ((gen.tanggal = DATE_FORMAT(lbr.tgl,'$fmt_date')) AND (lbr.hari IS NULL) AND lbr.expired_time IS NULL)
+              ) gen_lbr
+              GROUP BY gen_lbr.tanggal
+            ) gen_lbr2
+            LEFT OUTER JOIN (
+              SELECT att.user_id,
+              att.tanggal,
+              att.is_same,
+              att.jam_masuk,
+              att.jam_keluar,
+              att.is_late,
+              att.detik_telat_masuk,
+              att.is_early,
+              MAX(att.opt_keterangan) AS opt_keterangan,
+              MAX(att.counter_hadir_att) AS counter_hadir_att,
+              MAX(att.counter_hadir_opt) AS counter_hadir_opt,
+              MAX(att.late_is_counted) AS late_is_counted
+              FROM (
+                SELECT aa.user_id,
+                aa.tanggal,
+                aa.is_same,
+                DATE_FORMAT(aa.enter_time,'$fmt_time') AS jam_masuk,
+                DATE_FORMAT(aa.leave_time,'$fmt_time') AS jam_keluar,
+                IF(aa.enter_time > '$late_limit', 1, 0) AS is_late,
+                TIME_TO_SEC(IF(TIMEDIFF(DATE_FORMAT(aa.enter_time,'$fmt_time'),'$late_limit') > 0, TIMEDIFF(DATE_FORMAT(aa.enter_time,'$fmt_time'),'$late_limit'), NULL)) AS detik_telat_masuk,
+                IF(aa.leave_time < '$early_limit', 1, 0) AS is_early,
+                NULL AS opt_keterangan,
+                1 AS counter_hadir_att,
+                NULL AS counter_hadir_opt,
+                NULL AS late_is_counted
+                FROM (
+                  SELECT a.user_id,
+                  DATE_FORMAT(a.date,'$fmt_date') AS tanggal,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,IF(TIMEDIFF(DATE_FORMAT(a.min_time,'$fmt_time'),'$time_divider') >= 0,NULL,a.min_time),a.min_time) AS enter_time,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,IF(TIMEDIFF('$time_divider',DATE_FORMAT(a.max_time,'$fmt_time')) > 0,NULL,a.max_time),a.max_time) AS leave_time,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,1,0) AS is_same
+                  FROM attendance a
+                  WHERE a.user_id = $user_id
+                ) aa
+                UNION
+                SELECT k.user_id,
+                DATE_FORMAT(k.tgl,'$fmt_date') AS tanggal,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                k.opt_keterangan,
+                NULL,
+                o.counter_hadir,
+                o.late_is_counted
+                FROM keterangan k
+                LEFT OUTER JOIN opt_keterangan o
+                ON k.opt_keterangan = o.opt_keterangan_id
+                WHERE k.expired_time IS NULL
+                AND k.user_id = $user_id
+              ) att
+              GROUP BY att.tanggal
+            ) att2
+            ON gen_lbr2.tanggal = att2.tanggal
+            LEFT OUTER JOIN opt_keterangan opt
+            ON att2.opt_keterangan = opt.opt_keterangan_id)
             att3";
         
         //$query = $this->db->query($sql, array($fmt_date, (integer)$bulan, (integer)$tahun, (integer)$user_id, (integer)$user_id));
@@ -484,6 +596,7 @@ class Attendance_model extends CI_Model {
         $late_limit = $this->Parameter->get_value('JAM_MASUK');
         $early_limit = $this->Parameter->get_value('JAM_KELUAR');
         $time_divider = $this->Parameter->get_value('JAM_TENGAH');
+        $detik_pertimbangan = $this->Parameter->get_value('DETIK_PERTIMBANGAN');
         
         $this->load->database('default');
         
@@ -783,7 +896,7 @@ class Attendance_model extends CI_Model {
             LEFT OUTER JOIN opt_keterangan opt
             ON att2.opt_keterangan = opt.opt_keterangan_id) att3";*/
         
-        $sql = "SELECT $ttl AS sum_waktu_telat_masuk, SUM(smmry.detik_telat_masuk) AS sum_detik_telat_masuk, SUM(smmry.counter_late) AS sum_is_late, SUM(smmry.counter_hadir) AS sum_counter_hadir FROM (
+        /*$sql = "SELECT $ttl AS sum_waktu_telat_masuk, SUM(smmry.detik_telat_masuk) AS sum_detik_telat_masuk, SUM(smmry.counter_late) AS sum_is_late, SUM(smmry.counter_hadir) AS sum_counter_hadir FROM (
             SELECT att3.*,
           IF(att3.is_late*att3.late_is_counted IS NULL,0,att3.is_late*att3.late_is_counted) AS counter_late,
           IF(att3.detik_telat_masuk_actual*att3.late_is_counted IS NULL,0,att3.detik_telat_masuk_actual*att3.late_is_counted) AS detik_telat_masuk,
@@ -866,6 +979,118 @@ class Attendance_model extends CI_Model {
                   IF(a.max_time = a.min_time,IF(TIMEDIFF(DATE_FORMAT(a.min_time,'$fmt_time'),'$time_divider') >= 0,NULL,a.min_time),a.min_time) AS enter_time,
                   IF(a.max_time = a.min_time,IF(TIMEDIFF('$time_divider',DATE_FORMAT(a.max_time,'$fmt_time')) > 0,NULL,a.max_time),a.max_time) AS leave_time,
                   IF(a.max_time = a.min_time,1,0) AS is_same
+                  FROM attendance a
+                  WHERE a.user_id = $user_id
+                ) aa
+                UNION
+                SELECT k.user_id,
+                DATE_FORMAT(k.tgl,'$fmt_date') AS tanggal,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                k.opt_keterangan,
+                NULL,
+                o.counter_hadir,
+                o.late_is_counted
+                FROM keterangan k
+                LEFT OUTER JOIN opt_keterangan o
+                ON k.opt_keterangan = o.opt_keterangan_id
+                WHERE k.expired_time IS NULL
+                AND k.user_id = $user_id
+              ) att
+              GROUP BY att.tanggal
+            ) att2
+            ON gen_lbr2.tanggal = att2.tanggal
+            LEFT OUTER JOIN opt_keterangan opt
+            ON att2.opt_keterangan = opt.opt_keterangan_id)
+            att3) smmry";*/
+        
+        $sql = "SELECT $ttl AS sum_waktu_telat_masuk, SUM(smmry.detik_telat_masuk) AS sum_detik_telat_masuk, SUM(smmry.counter_late) AS sum_is_late, SUM(smmry.counter_hadir) AS sum_counter_hadir FROM (
+            SELECT att3.*,
+          IF(att3.is_late*att3.late_is_counted IS NULL,0,att3.is_late*att3.late_is_counted) AS counter_late,
+          IF(att3.detik_telat_masuk_actual*att3.late_is_counted IS NULL,0,att3.detik_telat_masuk_actual*att3.late_is_counted) AS detik_telat_masuk,
+          TIME_FORMAT(SEC_TO_TIME(IF(att3.detik_telat_masuk_actual*att3.late_is_counted>0,att3.detik_telat_masuk_actual*att3.late_is_counted,NULL)),'$fmt_time') AS waktu_telat_masuk
+        FROM (  
+          SELECT gen_lbr2.tanggal,
+            gen_lbr2.hari,
+            att2.jam_masuk,
+            att2.jam_keluar,
+            att2.opt_keterangan,
+            opt.content AS keterangan,
+            gen_lbr2.is_holiday,
+            gen_lbr2.desc_holiday,
+            att2.is_same,
+            att2.is_late,
+            att2.is_early,
+            att2.detik_telat_masuk AS detik_telat_masuk_actual,
+            IF(gen_lbr2.is_holiday,0,IF(is_late IS NULL,1,0)) AS is_blank,
+            gen_lbr2.tgl,
+            IF(IF(att2.counter_hadir_opt IS NOT NULL, att2.counter_hadir_opt, IF(gen_lbr2.is_holiday,0,att2.counter_hadir_att)) IS NULL, 0, IF(att2.counter_hadir_opt IS NOT NULL, att2.counter_hadir_opt, IF(gen_lbr2.is_holiday,0,att2.counter_hadir_att))) AS counter_hadir,
+            IF(gen_lbr2.is_holiday,0,IF(att2.late_is_counted IS NULL,IF(gen_lbr2.is_holiday,0,IF(is_late IS NULL,0,1)),att2.late_is_counted)) AS late_is_counted
+            FROM (
+              SELECT gen_lbr.*
+              FROM (  
+                SELECT gen.*,
+                lbr.deskripsi AS desc_holiday,
+                IF(lbr.deskripsi IS NULL,0,1) AS is_holiday
+                FROM (  
+                    SELECT DATE_FORMAT(DATE_ADD(MAKEDATE(z.tahun, z.gen_date), INTERVAL (z.bulan-1) MONTH),'$fmt_date') AS tanggal,
+                    DATE_FORMAT(DATE_ADD(MAKEDATE(z.tahun, z.gen_date), INTERVAL (z.bulan-1) MONTH),'%a') AS hari,
+                    gen_date AS tgl
+                    FROM (
+                      SELECT gen_date,
+                      $tahun AS tahun,
+                      $bulan AS bulan
+                      FROM tabel_helper
+                    ) z
+                    GROUP BY z.gen_date
+                    ORDER BY z.gen_date
+                ) gen
+                LEFT OUTER JOIN (
+                  SELECT *
+                  FROM libur
+                  ORDER BY libur.tgl DESC
+                ) lbr
+                ON ((UPPER(gen.hari) = UPPER(lbr.hari)) AND (lbr.tgl IS NULL) AND lbr.expired_time IS NULL)
+                OR ((gen.tanggal = DATE_FORMAT(lbr.tgl,'$fmt_date')) AND (lbr.hari IS NULL) AND lbr.expired_time IS NULL)
+              ) gen_lbr
+              GROUP BY gen_lbr.tanggal
+            ) gen_lbr2
+            LEFT OUTER JOIN (
+              SELECT att.user_id,
+              att.tanggal,
+              att.is_same,
+              att.jam_masuk,
+              att.jam_keluar,
+              att.is_late,
+              att.detik_telat_masuk,
+              att.is_early,
+              MAX(att.opt_keterangan) AS opt_keterangan,
+              MAX(att.counter_hadir_att) AS counter_hadir_att,
+              MAX(att.counter_hadir_opt) AS counter_hadir_opt,
+              MAX(att.late_is_counted) AS late_is_counted
+              FROM (
+                SELECT aa.user_id,
+                aa.tanggal,
+                aa.is_same,
+                DATE_FORMAT(aa.enter_time,'$fmt_time') AS jam_masuk,
+                DATE_FORMAT(aa.leave_time,'$fmt_time') AS jam_keluar,
+                IF(aa.enter_time > '$late_limit', 1, 0) AS is_late,
+                TIME_TO_SEC(IF(TIMEDIFF(DATE_FORMAT(aa.enter_time,'$fmt_time'),'$late_limit') > 0, TIMEDIFF(DATE_FORMAT(aa.enter_time,'$fmt_time'),'$late_limit'), NULL)) AS detik_telat_masuk,
+                IF(aa.leave_time < '$early_limit', 1, 0) AS is_early,
+                NULL AS opt_keterangan,
+                1 AS counter_hadir_att,
+                NULL AS counter_hadir_opt,
+                NULL AS late_is_counted
+                FROM (
+                  SELECT a.user_id,
+                  DATE_FORMAT(a.date,'$fmt_date') AS tanggal,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,IF(TIMEDIFF(DATE_FORMAT(a.min_time,'$fmt_time'),'$time_divider') >= 0,NULL,a.min_time),a.min_time) AS enter_time,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,IF(TIMEDIFF('$time_divider',DATE_FORMAT(a.max_time,'$fmt_time')) > 0,NULL,a.max_time),a.max_time) AS leave_time,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,1,0) AS is_same
                   FROM attendance a
                   WHERE a.user_id = $user_id
                 ) aa
@@ -1100,10 +1325,11 @@ class Attendance_model extends CI_Model {
         $late_limit = $this->Parameter->get_value('JAM_MASUK');
         $early_limit = $this->Parameter->get_value('JAM_KELUAR');
         $time_divider = $this->Parameter->get_value('JAM_TENGAH');
+        $detik_pertimbangan = $this->Parameter->get_value('DETIK_PERTIMBANGAN');
         
         $this->load->database('default');
         
-        $sql = "SELECT u.user_id,
+        /*$sql = "SELECT u.user_id,
             u.name AS nama,
             u.default_dept_id,
             d.dept_id,
@@ -1174,6 +1400,79 @@ class Attendance_model extends CI_Model {
             ON aa.opt_keterangan = o.opt_keterangan_id
             WHERE
             u.default_dept_id $filter_default_dept_id
+            ORDER BY u.name ASC";*/
+        
+        $sql = "SELECT u.user_id,
+            u.name AS nama,
+            u.default_dept_id,
+            d.dept_id,
+            d.dept_name AS dept_name,
+            aa.tanggal,
+            aa.user_id,
+            aa.jam_masuk AS jam_masuk,
+            aa.is_late AS is_late,
+            aa.detik_telat_masuk,
+            TIME_FORMAT(SEC_TO_TIME(aa.detik_telat_masuk),'$fmt_time') AS waktu_telat_masuk,
+            aa.jam_keluar AS jam_keluar,
+            aa.is_early AS is_early,
+            aa.opt_keterangan,
+            o.content AS keterangan
+            FROM userinfo u
+            LEFT OUTER JOIN
+            (
+              SELECT att.user_id,
+              att.tanggal,
+              att.is_same,
+              att.jam_masuk,
+              att.jam_keluar,
+              att.is_late,
+              att.detik_telat_masuk,
+              att.is_early,
+              MAX(att.opt_keterangan) AS opt_keterangan
+              FROM (
+                SELECT aa.user_id,
+                aa.tanggal,
+                aa.is_same,
+                DATE_FORMAT(aa.enter_time,'$fmt_time') AS jam_masuk,
+                DATE_FORMAT(aa.leave_time,'$fmt_time') AS jam_keluar,
+                IF(aa.enter_time > '$late_limit', 1, 0) AS is_late,
+                TIME_TO_SEC(IF(TIMEDIFF(DATE_FORMAT(aa.enter_time,'$fmt_time'),'$late_limit') > 0, TIMEDIFF(DATE_FORMAT(aa.enter_time,'$fmt_time'),'$late_limit'), NULL)) AS detik_telat_masuk,
+                IF(aa.leave_time < '$early_limit', 1, 0) AS is_early,
+                NULL AS opt_keterangan
+                FROM (
+                  SELECT a.user_id,
+                  DATE_FORMAT(a.date,'$fmt_date') AS tanggal,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,IF(TIMEDIFF(DATE_FORMAT(a.min_time,'$fmt_time'),'$time_divider') >= 0,NULL,a.min_time),a.min_time) AS enter_time,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,IF(TIMEDIFF('$time_divider',DATE_FORMAT(a.max_time,'$fmt_time')) > 0,NULL,a.max_time),a.max_time) AS leave_time,
+                  IF(TIME_TO_SEC(TIMEDIFF(a.max_time,a.min_time)) <= $detik_pertimbangan,1,0) AS is_same
+                  FROM attendance a
+                  WHERE a.date = DATE_ADD(MAKEDATE($tahun, $tanggal), INTERVAL ($bulan-1) MONTH)
+                ) aa
+                UNION
+                SELECT k.user_id,
+                DATE_FORMAT(k.tgl,'$fmt_date') AS tanggal,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                k.opt_keterangan
+                FROM keterangan k
+                LEFT OUTER JOIN opt_keterangan o
+                ON k.opt_keterangan = o.opt_keterangan_id
+                WHERE k.expired_time IS NULL
+                AND k.tgl = DATE_ADD(MAKEDATE($tahun, $tanggal), INTERVAL ($bulan-1) MONTH)
+              ) att
+              GROUP BY att.user_id
+            ) aa
+            ON u.user_id = aa.user_id
+            LEFT OUTER JOIN department d
+            ON u.default_dept_id = d.dept_id
+            LEFT OUTER JOIN opt_keterangan o
+            ON aa.opt_keterangan = o.opt_keterangan_id
+            WHERE
+            u.default_dept_id $filter_default_dept_id
             ORDER BY u.name ASC";
         
         //$query = $this->db->query($sql, array($fmt_date, (integer)$bulan, (integer)$tahun, (integer)$user_id, (integer)$user_id));
@@ -1185,6 +1484,8 @@ class Attendance_model extends CI_Model {
         $this->db->close();
         return $return;
     }
+    
+    
     
     function get_holidays_list_in_a_year($tahun) {
         if (empty($tahun)) {
@@ -1349,6 +1650,72 @@ class Attendance_model extends CI_Model {
         }
         $this->db->close();
         return $arr;
+    }
+    
+    function get_holidays_list($tahun = NULL, $bulan = NULL, $tgl = NULL) {
+        $tbl = 'libur';
+        $col_tgl = 'tgl';
+        $col_tgl_alias = 'tanggal';
+        $col_deskripsi = 'deskripsi';
+        //$col_tgl_alias = 'year';
+        
+        $notintgl = '';
+        if (!empty($tahun) && !empty($bulan) && !empty($tgl)) {
+            $notintgl = " AND $col_tgl != DATE_ADD(MAKEDATE($tahun, $tgl), INTERVAL ($bulan-1) MONTH) ";
+        }
+        
+        $this->load->database('default');
+        $sql = "SELECT DATE_FORMAT(l.$col_tgl,'%Y-%m-%d') AS $col_tgl_alias
+            FROM $tbl l
+            WHERE l.hari IS NULL
+            AND l.expired_time IS NULL$notintgl
+            ORDER BY l.$col_tgl ASC";
+        $query = $this->db->query($sql);
+        $str = '';
+        if ($query->num_rows() > 0) {
+            foreach ($query->result() as $obj) {
+                $str = $str.$obj->$col_tgl_alias.'|';
+            }
+        } else {
+            $str = '';
+        }
+        if (strlen($str) > 0) {
+            $str = substr($str, 0, (strlen($str)-1));
+        }
+        $this->db->close();
+        
+        return $str;
+    }
+    
+    function get_holidays_detail($tahun,$bulan,$tgl) {
+        if (empty($tahun) || empty($bulan) || empty($tgl)) {
+            return FALSE;
+        }
+        
+        $tbl = 'libur';
+        $col_tgl = 'tgl';
+        $col_tgl_alias = 'tanggal';
+        $col_deskripsi = 'deskripsi';
+        //$col_tgl_alias = 'year';
+        
+        $this->load->database('default');
+        $sql = "SELECT DATE_FORMAT(l.$col_tgl,'%a, %Y/%c/%e') AS $col_tgl_alias, l.$col_deskripsi, DATE_FORMAT(l.$col_tgl,'%d %b %Y') AS $col_tgl, o.content AS jenis, o.opt_libur_id
+            FROM $tbl l
+            LEFT OUTER JOIN opt_libur o
+            ON l.opt_libur_id = o.opt_libur_id    
+            WHERE l.hari IS NULL
+            AND l.expired_time IS NULL
+            AND $col_tgl = DATE_ADD(MAKEDATE($tahun, $tgl), INTERVAL ($bulan-1) MONTH) 
+            ORDER BY l.$col_tgl ASC";
+        $query = $this->db->query($sql);
+        if ($query->num_rows() == 1) {
+            $obj = $query->row();
+            $str = $obj->$col_tgl_alias.'|||'.$obj->$col_deskripsi.'|||'.$obj->opt_libur_id;
+        } else {
+            $str = NULL;
+        }
+        $this->db->close();
+        return $str;
     }
 }
 
