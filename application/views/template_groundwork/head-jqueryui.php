@@ -65,6 +65,6 @@
 
 }).call(this);
 </script>
-  <link rel="stylesheet" href="<?php echo base_url('assets/magnific_popup/dist')?>/magnific-popup.css">
-  <script type="text/javascript" src="<?php echo base_url('assets/magnific_popup/dist')?>/jquery.magnific-popup.js"></script>
+  <script type="text/javascript" src="<?php echo base_url('assets')?>/jquery-ui-1.10.4.custom/js/jquery-ui-1.10.4.custom.min.js"></script>
+  <link rel="stylesheet" href="<?php echo base_url('assets')?>/jquery-ui-1.10.4.custom/css/ui-lightness/jquery-ui-1.10.4.custom.min.css">
   </head>

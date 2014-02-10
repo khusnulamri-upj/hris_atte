@@ -578,4 +578,17 @@ class Attendance extends CI_Controller {
         
         $this->load->view('attendance/rpt_daily',$data);
     }
+    
+    public function entry_holidays() {
+        if (!$this->flexi_auth->is_privileged('vw_holidays')) {
+            $this->session->set_flashdata('message', '<p class="error">You do not have enough privileges.</p>');
+            redirect('user');
+        }
+        
+        $this->load->model('Attendance_model');
+        $data['year_list'] = $this->Attendance_model->get_all_year_in_attendance_holidays();
+        $data['ajaximg'] = "'<i class=\"icon-spinner icon-spin\"></i>'";
+        
+        $this->load->view('attendance/hldys_list',$data);
+    }
 }

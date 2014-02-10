@@ -1,6 +1,6 @@
         <nav role="navigation" class="nav gap-top">
           <ul role="menubar">
-            <li><button><i class="icon-group"></i></button></li>
+            <li class="desktop-only"><button><i class="icon-group"></i></button></li>
             <?php if (
                     ($this->flexi_auth->is_privileged('ins_ket')) ||
                     ($this->flexi_auth->is_privileged('vw_daily_rpt')) ||
@@ -10,7 +10,7 @@
                     ($this->flexi_auth->is_privileged('vw_year_dept_rpt_all'))
                     ) { ?>
             <li role="menu">
-              <button title="Presensi Karyawan/Dosen">&nbsp;Presensi Karyawan/Dosen&nbsp;</button>
+                <button title="Presensi Karyawan/Dosen" class="half-gap-left-desktop gap-right-desktop">Presensi Karyawan/Dosen</button>
               <ul>
                 <?php if (
                         ($this->flexi_auth->is_privileged('ins_ket'))
@@ -52,12 +52,15 @@
                 <?php if ((!$this->flexi_auth->in_group('Bagian HRD')) && (!$this->flexi_auth->in_group('Bagian ICT'))) { ?>
                 <li><a href="<?php echo site_url('import')?>" title="Transfer Data To Server">Transfer Data</a></li>
                 <?php } ?>
+                <?php if (($this->flexi_auth->in_group('Bagian HRD')) || ($this->flexi_auth->in_group('Master Admin'))) { ?>
+                <li><a href="<?php echo site_url('attendance/entry_holidays')?>" title="Daftar Hari Libur Nasional">Daftar Libur</a></li>
+                <?php } ?>
               </ul>
             </li>
             <?php } ?>
             
             <li role="menu">
-              <button title="Members Area">&nbsp;Member Area&nbsp;</button>
+              <button title="Members Area" class="half-gap-left-desktop half-gap-right-desktop">Member Area</button>
               <ul>
                 <li><a href="<?php echo base_url('members/update_account')?>" title="Update Account Details">Account Details</a></li>
                 <li><a href="<?php echo base_url('members/change_password')?>" title="Update Password">Update Password</a></li>

@@ -6,6 +6,40 @@ class Attendance_model extends CI_Model {
         // Call the Model constructor
         parent::__construct();
     }
+    
+    function get_all_year_in_attendance_holidays() {
+        $tbl = 'attendance';
+        $col_year = 'date';
+        $col_year_alias = 'year';
+        
+        $tbl_holidays = 'libur';
+        $col_year_holidays = 'tgl';
+        
+        $this->load->database('default');
+        /*$sql = "SELECT DATE_FORMAT($col_year,'%Y') AS $col_year_alias 
+            FROM $tbl 
+            GROUP BY DATE_FORMAT($col_year,'%Y')
+            ORDER BY $col_year DESC";*/
+        $sql = "SELECT * FROM (
+            SELECT DATE_FORMAT($col_year,'%Y') AS $col_year_alias 
+            FROM $tbl
+            UNION
+            SELECT DATE_FORMAT($col_year_holidays,'%Y') AS $col_year_alias
+            FROM $tbl_holidays
+            WHERE $col_year_holidays IS NOT NULL
+            ) y
+            GROUP BY $col_year_alias
+            ORDER BY $col_year_alias DESC";
+        $query = $this->db->query($sql);
+        $arr_year = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result() as $obj) {
+                $arr_year[$obj->$col_year_alias] = $obj->$col_year_alias;
+            }
+        }
+        $this->db->close();
+        return $arr_year;
+    }
 
     function get_all_year() {
         $tbl = 'attendance';
@@ -948,15 +982,22 @@ class Attendance_model extends CI_Model {
         }
         
         if ($empty_counter && ($user_id == 'NOTUSE') && ($tahun == 'NOTUSE') && ($bulan == 'NOTUSE')) {
-            $sql = "SELECT o.opt_keterangan_id AS id,
+            $sql = "SELECT * FROM (
+                SELECT o.opt_keterangan_id AS id,
                 o.content AS keterangan,
-                NULL AS jumlah
+                NULL AS jumlah,
+                o.expired_time
                 FROM opt_keterangan o
-                GROUP BY o.opt_keterangan_id";
+                WHERE o.expired_time IS NULL
+                GROUP BY o.opt_keterangan_id
+                ) s
+                WHERE s.expired_time IS NULL OR s.jumlah > 0";
         } else {
-            $sql = "SELECT o.opt_keterangan_id AS id,
+            $sql = "SELECT * FROM (
+                SELECT o.opt_keterangan_id AS id,
                 o.content AS keterangan,
-                count(a.user_id) AS jumlah
+                count(a.user_id) AS jumlah,
+                o.expired_time
                 FROM opt_keterangan o
                 LEFT OUTER JOIN (
                 SELECT k.*
@@ -966,7 +1007,9 @@ class Attendance_model extends CI_Model {
                 AND k.tgl < DATE_ADD(MAKEDATE($tahun, 1), INTERVAL ($bulan) MONTH)
                 AND k.expired_time IS NULL
                 ) a ON o.opt_keterangan_id = a.opt_keterangan
-                GROUP BY o.opt_keterangan_id";
+                GROUP BY o.opt_keterangan_id
+                ) s
+                WHERE s.expired_time IS NULL OR s.jumlah > 0";
         }
          
         $query = $this->db->query($sql);
@@ -988,15 +1031,21 @@ class Attendance_model extends CI_Model {
         }
         
         if ($empty_counter && ($user_id == 'NOTUSE') && ($tahun == 'NOTUSE') && ($bulan == 'NOTUSE')) {
-            $sql = "SELECT o.opt_keterangan_id AS id,
+            $sql = "SELECT * FROM (
+                SELECT o.opt_keterangan_id AS id,
                 o.reff AS keterangan,
-                NULL AS jumlah
+                NULL AS jumlah,
+                o.expired_time
                 FROM opt_keterangan o
-                GROUP BY SUBSTRING(o.order_no,1,$digit_order_no)";
+                GROUP BY SUBSTRING(o.order_no,1,$digit_order_no)
+                ) s
+                WHERE s.expired_time IS NULL OR s.jumlah > 0";
         } else {
-            $sql = "SELECT o.opt_keterangan_id AS id,
+            $sql = "SELECT * FROM (
+                SELECT o.opt_keterangan_id AS id,
                 o.reff AS keterangan,
-                count(a.user_id) AS jumlah
+                count(a.user_id) AS jumlah,
+                o.expired_time
                 FROM opt_keterangan o
                 LEFT OUTER JOIN (
                     SELECT k.*
@@ -1006,7 +1055,9 @@ class Attendance_model extends CI_Model {
                     AND k.tgl < DATE_ADD(MAKEDATE($tahun, 1), INTERVAL ($bulan) MONTH)
                     AND k.expired_time IS NULL
                 ) a ON o.opt_keterangan_id = a.opt_keterangan
-                GROUP BY SUBSTRING(o.order_no,1,$digit_order_no)";
+                GROUP BY SUBSTRING(o.order_no,1,$digit_order_no)
+                ) s
+                WHERE s.expired_time IS NULL OR s.jumlah > 0";
         }
         
         $query = $this->db->query($sql);
@@ -1135,6 +1186,170 @@ class Attendance_model extends CI_Model {
         return $return;
     }
     
+    function get_holidays_list_in_a_year($tahun) {
+        if (empty($tahun)) {
+            return NULL;
+        }
+        
+        $tbl = 'libur';
+        $col_tgl = 'tgl';
+        $col_tgl_alias = 'tanggal';
+        $col_deskripsi = 'deskripsi';
+        //$col_tgl_alias = 'year';
+        
+        $this->load->database('default');
+        $sql = "SELECT DATE_FORMAT(l.$col_tgl,'%Y/%c/%e') AS $col_tgl_alias, l.$col_deskripsi, DATE_FORMAT(l.$col_tgl,'%d %b %Y') AS $col_tgl, o.content AS jenis
+            FROM $tbl l
+            LEFT OUTER JOIN opt_libur o
+            ON l.opt_libur_id = o.opt_libur_id    
+            WHERE DATE_FORMAT(l.$col_tgl,'%Y') = $tahun
+            AND l.hari IS NULL
+            AND l.expired_time IS NULL
+            ORDER BY l.$col_tgl ASC";
+        $query = $this->db->query($sql);
+        $arr = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result() as $obj) {
+                $arr[$obj->$col_tgl.'|||'.$obj->$col_tgl_alias] = $obj->$col_deskripsi.'|||'.$obj->jenis;
+            }
+        } else {
+            $arr = NULL;
+        }
+        $this->db->close();
+        return $arr;
+    }
+    
+    function get_no_work_days() {
+        /*
+        INSERT INTO `libur` (`libur_id`, `expired_time`, `tipe`, `tgl`, `hari`, `deskripsi`) VALUES
+        (NULL, NULL, 'CONTINUE', NULL, 'SUN', 'Libur'),
+        (NULL, NULL, 'CONTINUE', NULL, 'SAT', 'Libur'); 
+        */
+        
+        $tbl = 'libur';
+        $col1 = 'hari';
+        //$col_tgl_alias = 'year';
+        
+        $this->load->database('default');
+        $sql = "SELECT * 
+            FROM $tbl
+            WHERE $col1 IS NOT NULL
+            AND expired_time IS NULL";
+        $query = $this->db->query($sql);
+        $arr = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result() as $obj) {
+                $arr[$obj->$col1] = $obj->$col1;
+            }
+        }
+        $this->db->close();
+        return $arr;
+    }
+    
+    function insert_holidays($deskripsi,$tahun,$bulan,$tgl,$opt) {
+        $current_logged_in_user = $this->flexi_auth->get_user_id();
+        
+        if (empty($deskripsi) || empty($tahun) || empty($bulan) || empty($tgl) || empty($opt)) {
+            return 0;
+        }
+        
+        $tbl = 'libur';
+        $col_deskripsi = 'deskripsi';
+        $col_tanggal = 'tgl';
+        $col_opt_libur = 'opt_libur_id';
+        
+        $this->load->database('default');
+        $this->db->trans_start();
+        
+        $strcek = "SELECT * FROM $tbl WHERE expired_time IS NULL
+                    AND $col_tanggal = DATE_ADD(MAKEDATE($tahun, $tgl), INTERVAL ($bulan-1) MONTH)";
+
+        $querycek = $this->db->query($strcek);
+
+        if ($querycek->num_rows == 0) {
+        
+            $data_mysql = array(
+                $col_deskripsi => $deskripsi,
+                $col_opt_libur => $opt,
+                'created_by' => $current_logged_in_user
+            );
+
+            $this->db->set($col_tanggal, 'DATE_ADD(MAKEDATE('.$tahun.', '.$tgl.'), INTERVAL ('.$bulan.'-1) MONTH)', FALSE);
+            $this->db->insert($tbl, $data_mysql);
+            
+        } else {
+            return -1; //AMRNOTE: DATA SUDAH ADA
+        }
+                    
+        $this->db->trans_complete();
+        
+        return 1; //AMRNOTE: FALSE == 100
+    }
+    
+    function delete_holidays($tahun,$bulan,$tgl) {
+        $current_logged_in_user = $this->flexi_auth->get_user_id();
+        
+        if (empty($tahun) || empty($bulan) || empty($tgl)) {
+            return FALSE;
+        }
+        
+        $tbl = 'libur';
+        $col_deskripsi = 'deskripsi';
+        $col_tanggal = 'tgl';
+        $col_opt_libur = 'opt_libur_id';
+        
+        $this->load->database('default');
+        $this->db->trans_start();
+        
+        $strcek = "SELECT * FROM $tbl WHERE expired_time IS NULL
+                    AND $col_tanggal = DATE_ADD(MAKEDATE($tahun, $tgl), INTERVAL ($bulan-1) MONTH)";
+
+        $querycek = $this->db->query($strcek);
+
+        if ($querycek->num_rows > 0) {
+            $str = "UPDATE $tbl
+                    SET expired_time = CURRENT_TIMESTAMP,
+                    modified_by = $current_logged_in_user
+                    WHERE expired_time IS NULL
+                    AND $col_tanggal = DATE_ADD(MAKEDATE($tahun, $tgl), INTERVAL ($bulan-1) MONTH)";
+
+            $query = $this->db->query($str);
+            
+            $this->db->trans_complete();
+            
+            return TRUE;
+        }
+        
+        $this->db->trans_complete();
+        
+        return FALSE; //AMRNOTE: FALSE == 100
+    }
+    
+    function get_holidays_type() {
+        $tbl = 'opt_libur';
+        $col1 = 'content';
+        $col2 = 'opt_libur_id';
+        $col_order = 'order_no';
+        
+        $this->load->database('default');
+        /*$sql = "SELECT * 
+            FROM $tbl
+            WHERE $col1 IS NOT NULL
+            AND expired_time IS NULL";*/
+        $sql = "SELECT * 
+            FROM $tbl
+            WHERE expired_time IS NULL
+            ORDER BY $col_order ASC";
+        $query = $this->db->query($sql);
+        $arr = array();
+        if ($query->num_rows() > 0) {
+            foreach ($query->result() as $obj) {
+                $arr[$obj->$col2] = $obj->$col1;
+            }
+        }
+        $this->db->close();
+        return $arr;
+    }
 }
 
 ?>
