@@ -94,7 +94,8 @@ $this->load->view('template_groundwork/body_menu');
         function delete_clicked(t,d){
             var c=confirm('Apakah anda yakin menghapus "'.concat(d).concat('" ?'));
             if (c==true) {
-                $.ajax({url:"<?php echo site_url('ajax_attendance/delete_holidays/'); ?>".concat('/'.concat(t)),
+                $.ajax({
+                    url:"<?php echo site_url('ajax_attendance/delete_holidays/'); ?>".concat('/'.concat(t)),
                     success:function(r){
                         if (r != '1') {
                             alert(r);
@@ -108,7 +109,24 @@ $this->load->view('template_groundwork/body_menu');
             } else {
                 repopulate(t);
             }
-            
+        };
+        
+        function edit_clicked(t){
+            $.ajax({
+                url: "<?php echo site_url('ajax_attendance/edit_holidays/'); ?>".concat('/'.concat(t)),
+                dataType: 'html',
+                success: function(data){
+                    getCodeWindow= $('<div class="five ninth padded white-bg centered"><div class="row"><div class="one whole align-right"><a class="popup-modal-dismiss" style="text-decoration:none;" href="#"><i class="icon-remove"></i></a></div></div><div class="row">'+data+'</div></div>');
+                    $.magnificPopup.open({
+                            preloader: false,
+                            modal: true,
+                            type: 'inline',
+                            items: {
+                                    src: getCodeWindow
+                            }
+                    });
+                }
+            });
         };
         function repopulate(t){var a = t.split('/'); $("#tab".concat(a[0])).html(<?php echo $ajaximg; ?>).load('<?php echo site_url('ajax_attendance/holidays_list/'); ?>'.concat('/'.concat(a[0])));};
         <?php foreach ($year_list as $y) { ?> $('#btn<?php echo $y; ?>').click(function(){repopulate('<?php echo $y; ?>/0/0')});<?php } ?>

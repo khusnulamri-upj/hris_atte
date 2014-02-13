@@ -235,7 +235,7 @@ class Ajax_attendance extends CI_Controller {
     }
     
     public function save_edited_holidays() {
-        if (!$this->flexi_auth->is_privileged('upd_holidays')) {
+        if (!$this->flexi_auth->is_privileged('ins_holidays')) {
             //$this->session->set_flashdata('message', '<p class="error">You do not have enough privileges.</p>');
             echo "You do not have enough privileges";
             exit();            
@@ -244,16 +244,24 @@ class Ajax_attendance extends CI_Controller {
         $strtgl = $this->input->post('strtng',TRUE);
         $deskripsi = $this->input->post('strdsk',TRUE);
         $opt = $this->input->post('ijns',TRUE);
+        $strtbf = $this->input->post('strtbf',TRUE);
         
         $arr_temp = explode(',', $strtgl);
-        $str_tgl = $arr_temp[1];
+        $str_tgl = trim($arr_temp[1]);
         $arr_tgl = explode('/', $str_tgl);
         $tahun = $arr_tgl[2];
         $bulan = intval($arr_tgl[1]);
         $tanggal = intval($arr_tgl[0]);
         
+        $arr_temp2 = explode(',', $strtbf);
+        $str_tgl2 = trim($arr_temp2[1]);
+        $arr_tgl2 = explode('/', $str_tgl2);
+        $tahun2 = $arr_tgl2[2];
+        $bulan2 = intval($arr_tgl2[1]);
+        $tanggal2 = intval($arr_tgl2[0]);
+        
         $this->load->model('Attendance_model');
-        $result = $this->Attendance_model->insert_holidays($deskripsi,$tahun,$bulan,$tanggal,$opt);
+        $result = $this->Attendance_model->update_holidays($deskripsi,$tahun,$bulan,$tanggal,$opt,$tahun2,$bulan2,$tanggal2);
         echo $result;
         //print_r($this->input->post());
     }
@@ -278,7 +286,7 @@ class Ajax_attendance extends CI_Controller {
         }
         $month_array = substr($month_array, 0, -1)."]";
         
-        $select_jenis_libur = '<select name="ajx_new_holidays_jenislibur" id="ajx_new_holidays_jenislibur">';
+        $select_jenis_libur = '<select name="ajx_upd_holidays_jenislibur" id="ajx_upd_holidays_jenislibur">';
         $this->load->model('Attendance_model');
         
         $str_detail = $this->Attendance_model->get_holidays_detail($tahun,$bulan,$tgl);
@@ -304,7 +312,8 @@ class Ajax_attendance extends CI_Controller {
                 <div class="three fifth">
                   <label for="tanggal">Tanggal</label>
                   <span class="select-wrap">
-                  <input id="datepicker" type="text" name="ajx_new_holidays_tanggal" value="'.$arr_detail[0].'">
+                  <input id="ajx_bef_upd_holidays_tanggal" type="hidden" name="ajx_bef_upd_holidays_tanggal" value="'.$arr_detail[0].'">
+                  <input id="datepicker" type="text" name="ajx_upd_holidays_tanggal" value="'.$arr_detail[0].'">
                   </span>
                   <label for="jenis" class="pad-top">Jenis Libur</label>
                   <span class="select-wrap">'.$select_jenis_libur.'</span>
@@ -316,7 +325,8 @@ class Ajax_attendance extends CI_Controller {
                         // assuming the controls you want to attach the plugin to 
                         // have the "datepicker" class set
                         $(\'#datepicker\').Zebra_DatePicker({
-                            view: \'years\',
+                            view: \'days\',
+                            start_date: \''.$arr_detail[0].'\',
                             months: '.$month_array.',
                             readonly_element: true,
                             show_clear_date: false,
@@ -339,18 +349,19 @@ class Ajax_attendance extends CI_Controller {
                            }
                         });
                     });
-                    $(\'#savenewholidays\').click(function(){
-                        if (($(\'#datepicker\').val().length > 0) && ($(\'#ajx_new_holidays_deskripsi\').val().length > 0)) {
-                            formData = {strtng:$(\'#datepicker\').val(),strdsk:$(\'#ajx_new_holidays_deskripsi\').val(),ijns:$(\'#ajx_new_holidays_jenislibur\').val()};
+                    $(\'#saveupdholidays\').click(function(){
+                        if (($(\'#datepicker\').val().length > 0) && ($(\'#ajx_upd_holidays_deskripsi\').val().length > 0)) {
+                            formData = {strtng:$(\'#datepicker\').val(),strdsk:$(\'#ajx_upd_holidays_deskripsi\').val(),ijns:$(\'#ajx_upd_holidays_jenislibur\').val(),strtbf:$(\'#ajx_bef_upd_holidays_tanggal\').val()};
                             $.ajax({
-                                url: "'.site_url('ajax_attendance/save_new_holidays/').' ",
+                                url: "'.site_url('ajax_attendance/save_edited_holidays/').' ",
                                 type: "POST",
                                 data : formData,
                                 success: function(data){
                                     if (data == 1) {
-                                        alert(\'"\'.concat($(\'#ajx_new_holidays_deskripsi\').val().concat(\'" berhasil disimpan\')));
+                                        var b = $(\'#ajx_bef_upd_holidays_tanggal\').val();
+                                        alert(\'"\'.concat($(\'#ajx_upd_holidays_deskripsi\').val().concat(\'" berhasil disimpan\')));
                                         $.magnificPopup.close();
-                                        var a = $(\'#datepicker\').val().split(\'/\');
+                                        var a = b.split(\'/\');
                                         repopulate(a[2].concat(\'/0/0\'));
                                     } else {
                                         alert(data);
@@ -364,9 +375,9 @@ class Ajax_attendance extends CI_Controller {
                   </script>
                   <label for="deskripsi" class="pad-top">Deskripsi</label>
                   <span class="select-wrap">
-                  <textarea name="ajx_new_holidays_deskripsi" id="ajx_new_holidays_deskripsi" maxlength=100 style="height: 80px; resize: none;">'.$arr_detail[1].'</textarea>
+                  <textarea name="ajx_upd_holidays_deskripsi" id="ajx_upd_holidays_deskripsi" maxlength=100 style="height: 80px; resize: none;">'.$arr_detail[1].'</textarea>
                   </span>
-                  <a role="button" class="gap-top gap-bottom" href="#" id="savenewholidays">Simpan</a>
+                  <a role="button" class="gap-top gap-bottom" href="#" id="saveupdholidays">Simpan</a>
                 </div>
               </div>';
     }

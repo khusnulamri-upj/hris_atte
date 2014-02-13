@@ -1699,7 +1699,7 @@ class Attendance_model extends CI_Model {
         //$col_tgl_alias = 'year';
         
         $this->load->database('default');
-        $sql = "SELECT DATE_FORMAT(l.$col_tgl,'%a, %Y/%c/%e') AS $col_tgl_alias, l.$col_deskripsi, DATE_FORMAT(l.$col_tgl,'%d %b %Y') AS $col_tgl, o.content AS jenis, o.opt_libur_id
+        $sql = "SELECT DATE_FORMAT(l.$col_tgl,'%a, %d/%m/%Y') AS $col_tgl_alias, l.$col_deskripsi, DATE_FORMAT(l.$col_tgl,'%d %b %Y') AS $col_tgl, o.content AS jenis, o.opt_libur_id
             FROM $tbl l
             LEFT OUTER JOIN opt_libur o
             ON l.opt_libur_id = o.opt_libur_id    
@@ -1716,6 +1716,57 @@ class Attendance_model extends CI_Model {
         }
         $this->db->close();
         return $str;
+    }
+    
+    function update_holidays($deskripsi,$tahun,$bulan,$tgl,$opt,$tahun_before,$bulan_before,$tgl_before) {
+        $current_logged_in_user = $this->flexi_auth->get_user_id();
+        
+        if (empty($deskripsi) || empty($tahun) || empty($bulan) || empty($tgl) || empty($opt) || empty($tahun_before) || empty($bulan_before) || empty($tgl_before)) {
+            return 0;
+        }
+        
+        $tbl = 'libur';
+        $col_id = 'libur_id';
+        $col_deskripsi = 'deskripsi';
+        $col_tanggal = 'tgl';
+        $col_opt_libur = 'opt_libur_id';
+        
+        $this->load->database('default');
+        $this->db->trans_start();
+        
+        $strcek = "SELECT * FROM $tbl WHERE expired_time IS NULL
+                    AND $col_tanggal = DATE_ADD(MAKEDATE($tahun_before, $tgl_before), INTERVAL ($bulan_before-1) MONTH)";
+
+        $querycek = $this->db->query($strcek);
+
+        if ($querycek->num_rows == 1) {
+            
+            $obj_cek = $querycek->row();
+            
+            $str = "UPDATE $tbl
+                SET expired_time = CURRENT_TIMESTAMP,
+                modified_by = $current_logged_in_user
+                WHERE expired_time IS NULL AND $col_id = ".$obj_cek->$col_id."
+                AND $col_tanggal = DATE_ADD(MAKEDATE($tahun_before, $tgl_before), INTERVAL ($bulan_before-1) MONTH)";
+
+            $query = $this->db->query($str);
+
+            $data_mysql = array(
+                $col_deskripsi => $deskripsi,
+                $col_opt_libur => $opt,
+                'created_by' => $current_logged_in_user
+            );
+
+            $this->db->set($col_tanggal, 'DATE_ADD(MAKEDATE('.$tahun.', '.$tgl.'), INTERVAL ('.$bulan.'-1) MONTH)', FALSE);
+            $this->db->insert($tbl, $data_mysql);
+            
+        } else {
+            return -1; //AMRNOTE: DATA SUDAH ADA
+        }
+                    
+        $this->db->trans_complete();
+        
+        return 1; //AMRNOTE: FALSE == 100
     }
 }
 
